@@ -37,55 +37,64 @@ def match_and_clean_columns(df):
 
     return cleaned_df
 
-# ==================== YP 商家 ID 动态映射算法 (多联盟扩展版) ====================
+# ==================== YP 商家 ID 动态映射算法 (智能兼容版) ====================
 @st.cache_data
 def load_yp_mapping_table(affiliate_name):
-    """
-    极速读取本地 YP 商家 ID 映射表 (支持多联盟扩展)
-    """
     affiliate_clean = str(affiliate_name).strip()
     
-    # 1. 字典统一管理：联盟名称 与 本地文件绝对路径的对应关系
+    # 1. 智能寻找包含 'data' 文件夹的项目根目录（支持 streamlit_app.py 和 pages/ 下的任意文件）
+    current_path = Path(__file__).resolve()
+    project_root = current_path.parent
+    
+    # 向上逐级查找，直到找到包含 data 文件夹的根目录
+    for parent in [current_path.parent] + list(current_path.parents):
+        if (parent / "data").is_dir():
+            project_root = parent
+            break
+
+    DATA_DIR = project_root / "data"
+
+    # 2. 映射关系字典（路径统一使用 Path 对象）
     file_path_map = {
-        "Tradedoubler": r"C:\Users\13264\Desktop\数据分析工具\YP-TD.xlsx",
-        "Flexoffers": r"C:\Users\13264\Desktop\数据分析工具\YP-FO.xlsx",
-        "Impact":r"C:\Users\13264\Desktop\数据分析工具\YP-IMP.xlsx",
-        "Adpump":r"C:\Users\13264\Desktop\数据分析工具\YP-Adpump.xlsx",
-        "Ascend(partnerize)":r"C:\Users\13264\Desktop\数据分析工具\YP-Ascend(partnerize).xlsx",
-        "Linkbux":r"C:\Users\13264\Desktop\数据分析工具\YP-Linkbux.xlsx",
-        "Rakuten":r"C:\Users\13264\Desktop\数据分析工具\YP-Rakuten.xlsx",
-        "WebgainsY":r"C:\Users\13264\Desktop\数据分析工具\YP-WebgainsY.xlsx",
-        "Partnerize":r"C:\Users\13264\Desktop\数据分析工具\YP-Partnerize.xlsx",
-        "Linkhaitao":r"C:\Users\13264\Desktop\数据分析工具\YP-Linkhaitao.xlsx",
-        "Shopnomix":r"C:\Users\13264\Desktop\数据分析工具\YP-Shopnomix.xlsx",
-        "Partnermatic":r"C:\Users\13264\Desktop\数据分析工具\YP-Partnermatic.xlsx",
-        "InvolveAsia-Y":r"C:\Users\13264\Desktop\数据分析工具\YP-InvolveAsia-Y.xlsx",
-        # 💡 以后如果接了新联盟（比如 CJ、Impact），只需要在这里加一行即可：
-        # "CJ Affiliate": r"C:\Users\13264\Desktop\数据分析工具\YP-CJ.xlsx",
+        "Tradedoubler": DATA_DIR / "YP-TD.xlsx",
+        "Flexoffers": DATA_DIR / "YP-FO.xlsx",
+        "Impact": DATA_DIR / "YP-IMP.xlsx",
+        "Adpump": DATA_DIR / "YP-Adpump.xlsx",
+        "Ascend(partnerize)": DATA_DIR / "YP-Ascend (partnerize).xlsx",
+        "Linkbux": DATA_DIR / "YP-Linkbux.xlsx",
+        "Rakuten": DATA_DIR / "YP-Rakuten.xlsx",
+        "WebgainsY": DATA_DIR / "YP-WebgainsY.xlsx",
+        "Partnerize": DATA_DIR / "YP-Partnerize.xlsx",
+        "Linkhaitao": DATA_DIR / "YP-Linkhaitao.xlsx",
+        "Shopnomix": DATA_DIR / "YP-Shopnomix.xlsx",
+        "Partnermatic": DATA_DIR / "YP-Partnermatic.xlsx",
+        "InvolveAsia-Y": DATA_DIR / "YP-InvolveAsia-Y.xlsx",
     }
     
-    # 2. 根据选中的联盟拿到对应路径
     target_path = file_path_map.get(affiliate_clean)
 
-    # 3. 校验文件是否存在并快速读取
-    if target_path and os.path.exists(target_path):
-        try:
-            # 只读取前两列 (A列: ID, B列: 商家/广告名)
-            df_map = pd.read_excel(target_path, usecols=[0, 1])
-            df_map.columns = ["商家ID", "商家名称"]
-            
-            # 转为字符串并去首尾空格
-            df_map["商家ID"] = df_map["商家ID"].astype(str).str.strip()
-            df_map["商家名称"] = df_map["商家名称"].astype(str).str.strip()
-            
-            # 精准去重并返回
-            return df_map.drop_duplicates(subset=["商家名称"])
-        except Exception as e:
-            st.error(f"⚠️ 读取 YP 映射文件失败 [{target_path}]: {e}")
-            return None
-            
-    return None
+    # 路径不存在时的精准报错提示
+    if not target_path:
+        st.warning(f"⚠️ 下拉框选中的【{affiliate_clean}】未在代码字典中配置对应 Excel 文件")
+        return None
 
+    if not target_path.exists():
+        st.error(f"❌ 找不到文件：`{target_path.name}` (尝试读取路径: `{target_path}`)，请检查文件文件名拼写！")
+        return None
+
+    try:
+        # 只读取前两列 (A列: ID, B列: 商家/广告名)
+        df_map = pd.read_excel(target_path, usecols=[0, 1], engine="openpyxl")
+        df_map.columns = ["商家ID", "商家名称"]
+        
+        # 强清洗：全部转为字符串、去除空格、统一小写，提升碰撞匹配成功率
+        df_map["商家ID"] = df_map["商家ID"].astype(str).str.strip()
+        df_map["商家名称_clean"] = df_map["商家名称"].astype(str).str.strip().str.lower()
+        
+        return df_map.drop_duplicates(subset=["商家名称_clean"])
+    except Exception as e:
+        st.error(f"⚠️ 读取 YP 映射文件失败 [{target_path.name}]: {e}")
+        return None
 
 # ==================== YP 商家 ID 末端匹配函数 ====================
 def attach_merchant_id(df_target, affiliate_name):
