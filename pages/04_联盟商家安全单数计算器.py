@@ -66,6 +66,12 @@ def load_yp_mapping_table(affiliate_name):
         # 如果找不到文件，显示出具体的绝对路径，方便排查
         st.warning(f"⚠️ 未找到文件！排查路径：`{target_path}`")
         return None
+    
+ALLIANCE_LIST = [
+    "Tradedoubler", "Flexoffers", "Impact", "Adpump",
+    "Ascend(partnerize)", "Linkbux", "Rakuten", "WebgainsY",
+    "Partnerize", "Linkhaitao", "Shopnomix", "Partnermatic", "InvolveAsia-Y"
+]
 # ==========================================
 # 行业 CVR 数据库：[最低底线, 建议默认值, 行业上限]
 # ==========================================
