@@ -16,34 +16,24 @@ st.caption("基于流量漏斗推算 + 商家 AM 人工审查防查阈值（Stea
 st.markdown("---")
 
 # ==========================================
-# 1. 联盟 Excel 动态读取函数 (全环境自适应版)
+# 1. 联盟 Excel 动态读取函数 (适配 pages 与 data 并列结构)
 # ==========================================
 @st.cache_data
 def load_yp_mapping_table(affiliate_name):
     """
-    极速读取本地/云端 YP 商家 ID 映射表 (自动识别 pages 子目录与根目录)
+    读取与 pages 文件夹并列的 data 目录下的 YP 映射表
     """
     affiliate_clean = str(affiliate_name).strip()
     
-    # 💡 自动智能寻找真实的 data/ 文件夹位置
-    current_file_dir = os.path.dirname(os.path.abspath(__file__))
-    possible_data_dirs = [
-        os.path.join(current_file_dir, "data"),                      # 情况 1：在当前文件所在目录
-        os.path.join(os.path.dirname(current_file_dir), "data"),     # 情况 2：在上一级目录（针对 pages/ 内的文件）
-        os.path.join(os.getcwd(), "data")                            # 情况 3：在当前 Python 工作目录
-    ]
-    
-    DATA_DIR = None
-    for d_path in possible_data_dirs:
-        if os.path.exists(d_path) and os.path.isdir(d_path):
-            DATA_DIR = d_path
-            break
-            
-    if not DATA_DIR:
-        st.error(f"❌ 找不到 `data` 文件夹！尝试排查的路径列表：{possible_data_dirs}")
-        return None
+    # 💡 核心路径逻辑：
+    # __file__ 是当前 pages/xxx.py 的路径
+    # 第 1 次 dirname 得到 .../pages
+    # 第 2 次 dirname 得到 .../根目录 (项目主目录)
+    PAGES_DIR = os.path.dirname(os.path.abspath(__file__))
+    BASE_DIR = os.path.dirname(PAGES_DIR) 
+    DATA_DIR = os.path.join(BASE_DIR, "data")
 
-    # 字典统一管理文件名 (请核对你的文件真实文件名与大小写)
+    # 字典统一管理文件名
     file_path_map = {
         "Tradedoubler": os.path.join(DATA_DIR, "YP-TD.xlsx"),
         "Flexoffers": os.path.join(DATA_DIR, "YP-FO.xlsx"),
@@ -64,21 +54,17 @@ def load_yp_mapping_table(affiliate_name):
 
     if target_path and os.path.exists(target_path):
         try:
-            # 读取前两列
             df_map = pd.read_excel(target_path, usecols=[0, 1])
             df_map.columns = ["商家ID", "商家名称"]
-            
-            # 转字符串并去空格
             df_map["商家ID"] = df_map["商家ID"].astype(str).str.strip()
             df_map["商家名称"] = df_map["商家名称"].astype(str).str.strip()
-            
             return df_map.drop_duplicates(subset=["商家名称"])
         except Exception as e:
-            st.error(f"⚠️ 找到表格但读取失败 [{os.path.basename(target_path)}]: {e}")
+            st.error(f"⚠️ 读取表格失败 [{os.path.basename(target_path)}]: {e}")
             return None
     else:
-        # 如果文件不存在，输出明确的路径提示
-        st.warning(f"⚠️ 在 `{DATA_DIR}` 目录下未找到目标文件：`{os.path.basename(target_path) if target_path else affiliate_clean}`")
+        # 如果找不到文件，显示出具体的绝对路径，方便排查
+        st.warning(f"⚠️ 未找到文件！排查路径：`{target_path}`")
         return None
 # ==========================================
 # 行业 CVR 数据库：[最低底线, 建议默认值, 行业上限]
