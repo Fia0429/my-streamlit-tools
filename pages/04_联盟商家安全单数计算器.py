@@ -15,22 +15,71 @@ st.title("🛡️ 商家联盟转化与风控防查计算器 (V3.1)")
 st.caption("基于流量漏斗推算 + 商家 AM 人工审查防查阈值（Stealth Safety Cap）评估")
 st.markdown("---")
 
-# 联盟 Excel 路径映射
-file_path_map = {
-    "Tradedoubler": r"C:\Users\13264\Desktop\数据分析工具\YP-TD.xlsx",
-    "Flexoffers": r"C:\Users\13264\Desktop\数据分析工具\YP-FO.xlsx",
-    "Impact": r"C:\Users\13264\Desktop\数据分析工具\YP-IMP.xlsx",
-    "Adpump": r"C:\Users\13264\Desktop\数据分析工具\YP-Adpump.xlsx",
-    "Ascend(partnerize)": r"C:\Users\13264\Desktop\数据分析工具\YP-Ascend(partnerize).xlsx",
-    "Linkbux": r"C:\Users\13264\Desktop\数据分析工具\YP-Linkbux.xlsx",
-    "Rakuten": r"C:\Users\13264\Desktop\数据分析工具\YP-Rakuten.xlsx",
-    "WebgainsY": r"C:\Users\13264\Desktop\数据分析工具\YP-WebgainsY.xlsx",
-    "Partnerize": r"C:\Users\13264\Desktop\数据分析工具\YP-Partnerize.xlsx",
-    "Linkhaitao": r"C:\Users\13264\Desktop\数据分析工具\YP-Linkhaitao.xlsx",
-    "Shopnomix": r"C:\Users\13264\Desktop\数据分析工具\YP-Shopnomix.xlsx",
-    "Partnermatic": r"C:\Users\13264\Desktop\数据分析工具\YP-Partnermatic.xlsx",
-    "InvolveAsia-Y": r"C:\Users\13264\Desktop\数据分析工具\YP-InvolveAsia-Y.xlsx"
-}
+import os
+import pandas as pd
+import streamlit as st
+
+# ==========================================
+# 1. 联盟 Excel 动态读取与映射函数 (云端/相对路径版)
+# ==========================================
+@st.cache_data
+def load_yp_mapping_table(affiliate_name):
+    """
+    极速读取本地/云端 YP 商家 ID 映射表 (支持动态相对路径)
+    """
+    affiliate_clean = str(affiliate_name).strip()
+    
+    # 动态获取项目根目录与 data 文件夹路径
+    # 💡 注意：如果当前 py 文件在根目录，用 os.path.dirname(os.path.abspath(__file__))
+    # 💡 如果当前 py 文件在 pages/ 子目录下，用 os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    DATA_DIR = os.path.join(BASE_DIR, "data")
+
+    # 字典统一管理：联盟名称 与 动态文件路径的对应关系
+    file_path_map = {
+        "Tradedoubler": os.path.join(DATA_DIR, "YP-TD.xlsx"),
+        "Flexoffers": os.path.join(DATA_DIR, "YP-FO.xlsx"),
+        "Impact": os.path.join(DATA_DIR, "YP-IMP.xlsx"),
+        "Adpump": os.path.join(DATA_DIR, "YP-Adpump.xlsx"),
+        "Ascend(partnerize)": os.path.join(DATA_DIR, "YP-Ascend(partnerize).xlsx"),
+        "Linkbux": os.path.join(DATA_DIR, "YP-Linkbux.xlsx"),
+        "Rakuten": os.path.join(DATA_DIR, "YP-Rakuten.xlsx"),
+        "WebgainsY": os.path.join(DATA_DIR, "YP-WebgainsY.xlsx"),
+        "Partnerize": os.path.join(DATA_DIR, "YP-Partnerize.xlsx"),
+        "Linkhaitao": os.path.join(DATA_DIR, "YP-Linkhaitao.xlsx"),
+        "Shopnomix": os.path.join(DATA_DIR, "YP-Shopnomix.xlsx"),
+        "Partnermatic": os.path.join(DATA_DIR, "YP-Partnermatic.xlsx"),
+        "InvolveAsia-Y": os.path.join(DATA_DIR, "YP-InvolveAsia-Y.xlsx")
+    }
+    
+    target_path = file_path_map.get(affiliate_clean)
+
+    if target_path and os.path.exists(target_path):
+        try:
+            # 读取前两列 (第0列: ID, 第1列: 名称)
+            df_map = pd.read_excel(target_path, usecols=[0, 1])
+            df_map.columns = ["商家ID", "商家名称"]
+            
+            # 转为字符串并去首尾空格
+            df_map["商家ID"] = df_map["商家ID"].astype(str).str.strip()
+            df_map["商家名称"] = df_map["商家名称"].astype(str).str.strip()
+            
+            # 精准去重并返回
+            return df_map.drop_duplicates(subset=["商家名称"])
+        except Exception as e:
+            st.error(f"⚠️ 读取 YP 映射文件失败 [{target_path}]: {e}")
+            return None
+            
+    return None
+
+# 支持选择的联盟列表
+ALLIANCE_LIST = [
+    "Tradedoubler", "Flexoffers", "Impact", "Adpump",
+    "Ascend(partnerize)", "Linkbux", "Rakuten", "WebgainsY",
+    "Partnerize", "Linkhaitao", "Shopnomix", "Partnermatic", "InvolveAsia-Y"
+]
+
+
 # ==========================================
 # 行业 CVR 数据库：[最低底线, 建议默认值, 行业上限]
 # ==========================================
@@ -50,64 +99,57 @@ CATEGORY_CVR_INFO = {
 }
 
 # ==========================================
-# 2. 模块 1：商家与联盟选择 (带表格精准检索)
+# 2. 模块 1：商家与联盟选择 (对接动态映射函数)
 # ==========================================
 st.header("1. 商家与联盟选择（可选）")
 
 col_a1, col_a2 = st.columns(2)
 
 with col_a1:
-    selected_alliance = st.selectbox("选择所属联盟：", options=["-- 跳过选择 --"] + list(file_path_map.keys()))
+    selected_alliance = st.selectbox("选择所属联盟：", options=["-- 跳过选择 --"] + ALLIANCE_LIST)
 
 # 初始化变量
 selected_merchant_name = ""
 selected_merchant_id = ""
 
 if selected_alliance != "-- 跳过选择 --":
-    excel_path = file_path_map.get(selected_alliance, "")
+    # 调用缓存函数加载表格
+    df_alliance = load_yp_mapping_table(selected_alliance)
     
-    if os.path.exists(excel_path):
-        try:
-            # 读取 Excel 文件
-            df_alliance = pd.read_excel(excel_path)
+    if df_alliance is not None and not df_alliance.empty:
+        with col_a2:
+            search_kw = st.text_input("🔍 搜索商家名称或 ID：", placeholder="输入关键词筛选，例如: Capalus 或 1001...")
+        
+        if search_kw.strip():
+            kw = search_kw.strip().lower()
+            # 针对 商家名称 和 商家ID 同时进行不区分大小写的模糊匹配
+            mask = (
+                df_alliance["商家名称"].str.lower().str.contains(kw) | 
+                df_alliance["商家ID"].str.lower().str.contains(kw)
+            )
+            filtered_df = df_alliance[mask]
             
-            with col_a2:
-                # 关键词搜索
-                search_kw = st.text_input("🔍 搜索商家名称或 ID：", placeholder="输入关键词筛选，例如: Capalus 或 1001...")
-            
-            if search_kw.strip():
-                # 模糊检索匹配
-                mask = df_alliance.astype(str).apply(
-                    lambda row: row.str.contains(search_kw.strip(), case=False).any(), axis=1
-                )
-                filtered_df = df_alliance[mask]
+            if not filtered_df.empty:
+                # 构造下拉选项："名称 | ID: 编号"
+                options_list = [
+                    f"{row['商家名称']} | ID: {row['商家ID']}" 
+                    for _, row in filtered_df.iterrows()
+                ]
                 
-                if not filtered_df.empty:
-                    # 拼接第一列(假设为名称)和第二列(假设为ID)作为下拉选项文本
-                    options_list = []
-                    for idx, row in filtered_df.iterrows():
-                        row_vals = [str(val) for val in row.values]
-                        m_name = row_vals[0] if len(row_vals) > 0 else "未知"
-                        m_id = row_vals[1] if len(row_vals) > 1 else "未知"
-                        options_list.append(f"{m_name} | ID: {m_id}")
-                    
-                    # 供用户选择具体哪一条商家记录
-                    chosen_option = st.selectbox(f"🎯 找到 {len(filtered_df)} 个匹配结果，请选择：", options=options_list)
-                    
-                    # 从选择的选项中解析出 名称 和 ID
-                    if chosen_option:
-                        split_vals = chosen_option.split(" | ID: ")
-                        selected_merchant_name = split_vals[0]
-                        selected_merchant_id = split_vals[1] if len(split_vals) > 1 else ""
-                else:
-                    st.warning("⚠️ 未找到匹配的商家，请检查关键字或手动输入。")
-        except Exception as e:
-            st.warning(f"⚠️ 文件读取失败 ({e})，已切换为手动模式。")
+                chosen_option = st.selectbox(f"🎯 找到 {len(filtered_df)} 个匹配结果，请选择：", options=options_list)
+                
+                # 自动提取名称与 ID
+                if chosen_option:
+                    split_vals = chosen_option.split(" | ID: ")
+                    selected_merchant_name = split_vals[0]
+                    selected_merchant_id = split_vals[1] if len(split_vals) > 1 else ""
+            else:
+                st.warning("⚠️ 未找到匹配的商家，请检查关键字或手动输入。")
     else:
         with col_a2:
-            st.info("💡 未检测到该联盟的本地表格，可直接在下方手动输入。")
+            st.info("💡 未能加载该联盟的表格，请确认表格文件已上传至 `data/` 目录。")
 
-# 下方：清晰展示/确认匹配出来的 商家名称 & 商家 ID
+# 确认/手动修正商家信息
 st.markdown("##### 📌 确认商家信息")
 col_m1, col_m2 = st.columns(2)
 
@@ -124,6 +166,7 @@ merchant_id = col_m2.text_input(
 )
 
 st.markdown("---")
+
 
 # ==========================================
 # 3. 模块 2：基础数据与商业参数（优化布局版）
