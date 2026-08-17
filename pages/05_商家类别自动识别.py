@@ -16,7 +16,7 @@ from playwright.sync_api import sync_playwright
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="商家官网数据抓取与三阶梯解析工具",
-    page_icon="🛡️",
+    page_icon="🔍",
     layout="wide"
 )
 
